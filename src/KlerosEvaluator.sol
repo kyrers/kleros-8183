@@ -7,43 +7,54 @@ import {IArbitrableV2} from "./interfaces/IArbitrableV2.sol";
 
 /// @title KlerosEvaluator
 /// @notice ERC-8183 evaluator backed by Kleros arbitration. Submitted work
-///         completes optimistically unless the client challenges within the
-///         challenge window; a challenge creates a dispute on the arbitrator
-///         and the ruling is enforced on the escrow. Design in the README.
+/// completes optimistically unless the client challenges within the challenge
+/// window; a challenge creates a dispute on the arbitrator and the ruling is
+/// enforced on the escrow. Design choices in the README.
 contract KlerosEvaluator is IArbitrableV2 {
-    uint256 public constant RULING_OPTIONS = 2;
-    uint256 public constant RULING_ACCEPT = 1;
-    uint256 public constant RULING_REJECT = 2;
+    // ************************************* //
+    // *             Storage               * //
+    // ************************************* //
 
-    ERC8183 public immutable escrow;
-    IArbitratorV2 public immutable arbitrator;
-    uint256 public immutable challengeWindow;
-    uint256 public immutable minExpiryMargin;
-    bytes public arbitratorExtraData;
+    uint256 public constant RULING_OPTIONS = 2; // Number of ruling choices: accept or reject the submission.
+    uint256 public constant RULING_ACCEPT = 1; // The submission is acceptable.
+    uint256 public constant RULING_REJECT = 2; // The submission is not acceptable.
 
-    mapping(uint256 jobId => bool) public accepted;
-    mapping(uint256 jobId => bool) public challenged;
-    mapping(uint256 disputeId => uint256 jobId) public disputeToJob;
+    ERC8183 public immutable escrow; // The ERC-8183 escrow this contract evaluates for.
+    IArbitratorV2 public immutable arbitrator; // The Kleros arbitrator.
+    uint256 public immutable challengeWindow; // Seconds after submission during which the client can challenge.
+    uint256 public immutable minExpiryMargin; // Minimum seconds between acceptance and job expiry.
+    bytes public arbitratorExtraData; // Arbitrator configuration (court, number of jurors).
 
-    event JobAccepted(uint256 indexed jobId);
-    event JobRefused(uint256 indexed jobId);
-    event Challenged(uint256 indexed jobId, uint256 indexed disputeId);
+    mapping(uint256 jobId => bool) public accepted; // Jobs this contract agreed to serve.
+    mapping(uint256 jobId => bool) public challenged; // Jobs whose submission was disputed.
+    mapping(uint256 disputeId => uint256 jobId) public disputeToJob; // Maps arbitrator dispute IDs to job IDs.
 
-    error NotJobEvaluator();
-    error NotJobClient();
-    error JobNotFunded();
-    error JobNotSubmitted();
-    error AlreadyAccepted();
-    error NotAccepted();
-    error AlreadyChallenged();
-    error ChallengeWindowActive();
-    error ChallengeWindowOver();
-    error InsufficientArbitrationFee();
-    error OnlyArbitrator();
-    error UnknownDispute();
-    error InvalidRuling();
-    error RefundFailed();
+    // ************************************* //
+    // *              Events               * //
+    // ************************************* //
 
+    /// @notice Emitted when this contract agrees to serve a job.
+    /// @param _jobId The job.
+    event JobAccepted(uint256 indexed _jobId);
+
+    /// @notice Emitted when this contract refuses a job and rejects it on the escrow.
+    /// @param _jobId The job.
+    event JobRefused(uint256 indexed _jobId);
+
+    /// @notice Emitted when the client challenges a submission.
+    /// @param _jobId The job.
+    /// @param _disputeId The dispute created on the arbitrator.
+    event Challenged(uint256 indexed _jobId, uint256 indexed _disputeId);
+
+    // ************************************* //
+    // *            Constructor            * //
+    // ************************************* //
+
+    /// @param _escrow The ERC-8183 escrow to evaluate for.
+    /// @param _arbitrator The Kleros arbitrator.
+    /// @param _arbitratorExtraData Arbitrator configuration (court, number of jurors).
+    /// @param _challengeWindow Seconds after submission during which the client can challenge.
+    /// @param _minExpiryMargin Minimum seconds between acceptance and job expiry.
     constructor(
         ERC8183 _escrow,
         IArbitratorV2 _arbitrator,
@@ -58,73 +69,76 @@ contract KlerosEvaluator is IArbitrableV2 {
         minExpiryMargin = _minExpiryMargin;
     }
 
-    /// @notice Creation-time checks only; funding is checked in acceptJob.
-    function canAccept(uint256 jobId) external view returns (bool) {
-        ERC8183.Job memory job = escrow.getJob(jobId);
-        return job.evaluator == address(this) && job.expiredAt >= block.timestamp + minExpiryMargin;
-    }
+    // ************************************* //
+    // *         State Modifiers           * //
+    // ************************************* //
 
     /// @notice The client asks this contract to serve a funded job. Refusal
-    ///         rejects the job on the escrow, refunding the client instantly.
-    function acceptJob(uint256 jobId) external {
-        ERC8183.Job memory job = escrow.getJob(jobId);
-        if (job.evaluator != address(this)) revert NotJobEvaluator();
-        if (msg.sender != job.client) revert NotJobClient();
-        if (job.status != ERC8183.JobStatus.Funded) revert JobNotFunded();
-        if (accepted[jobId]) revert AlreadyAccepted();
+    /// rejects the job on the escrow, refunding the client instantly.
+    /// @param _jobId The job to accept.
+    function acceptJob(uint256 _jobId) external {
+        ERC8183.Job memory job = escrow.getJob(_jobId);
+        require(job.evaluator == address(this), NotJobEvaluator());
+        require(msg.sender == job.client, NotJobClient());
+        require(job.status == ERC8183.JobStatus.Funded, JobNotFunded());
+        require(!accepted[_jobId], AlreadyAccepted());
 
         if (job.expiredAt < block.timestamp + minExpiryMargin) {
-            escrow.reject(jobId, bytes32(0), "");
-            emit JobRefused(jobId);
+            escrow.reject(_jobId, bytes32(0), "");
+            emit JobRefused(_jobId);
         } else {
-            accepted[jobId] = true;
-            emit JobAccepted(jobId);
+            accepted[_jobId] = true;
+            emit JobAccepted(_jobId);
         }
     }
 
     /// @notice The client disputes the submitted work within the challenge
-    ///         window, paying the arbitration fee. Excess is refunded.
-    function challenge(uint256 jobId) external payable {
-        if (!accepted[jobId]) revert NotAccepted();
-        if (challenged[jobId]) revert AlreadyChallenged();
-        ERC8183.Job memory job = escrow.getJob(jobId);
-        if (msg.sender != job.client) revert NotJobClient();
-        if (job.status != ERC8183.JobStatus.Submitted) revert JobNotSubmitted();
-        if (block.timestamp > job.submittedAt + challengeWindow) revert ChallengeWindowOver();
+    /// window, paying the arbitration fee. Excess is refunded.
+    /// @param _jobId The job whose submission is disputed.
+    function challenge(uint256 _jobId) external payable {
+        require(accepted[_jobId], NotAccepted());
+        require(!challenged[_jobId], AlreadyChallenged());
+        ERC8183.Job memory job = escrow.getJob(_jobId);
+        require(msg.sender == job.client, NotJobClient());
+        require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
+        require(block.timestamp <= job.submittedAt + challengeWindow, ChallengeWindowOver());
 
         uint256 cost = arbitrator.arbitrationCost(arbitratorExtraData);
-        if (msg.value < cost) revert InsufficientArbitrationFee();
-        challenged[jobId] = true;
+        require(msg.value >= cost, InsufficientArbitrationFee());
+        challenged[_jobId] = true;
         uint256 disputeId = arbitrator.createDispute{value: cost}(RULING_OPTIONS, arbitratorExtraData);
-        disputeToJob[disputeId] = jobId;
-        emit Challenged(jobId, disputeId);
+        disputeToJob[disputeId] = _jobId;
+        emit Challenged(_jobId, disputeId);
 
         if (msg.value > cost) {
-            (bool success,) = msg.sender.call{value: msg.value - cost}("");
-            if (!success) revert RefundFailed();
+            (bool success, ) = msg.sender.call{value: msg.value - cost}("");
+            require(success, RefundFailed());
         }
     }
 
     /// @notice Completes a job whose challenge window passed unchallenged.
-    ///         Callable by anyone.
-    function finalize(uint256 jobId) external {
-        if (!accepted[jobId]) revert NotAccepted();
-        if (challenged[jobId]) revert AlreadyChallenged();
-        ERC8183.Job memory job = escrow.getJob(jobId);
-        if (job.status != ERC8183.JobStatus.Submitted) revert JobNotSubmitted();
-        if (block.timestamp <= job.submittedAt + challengeWindow) revert ChallengeWindowActive();
+    /// Callable by anyone.
+    /// @param _jobId The job to complete.
+    function finalize(uint256 _jobId) external {
+        require(accepted[_jobId], NotAccepted());
+        require(!challenged[_jobId], DisputePending());
+        ERC8183.Job memory job = escrow.getJob(_jobId);
+        require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
+        require(block.timestamp > job.submittedAt + challengeWindow, ChallengeWindowActive());
 
-        escrow.complete(jobId, bytes32(0), "");
+        escrow.complete(_jobId, bytes32(0), "");
     }
 
     /// @notice Arbitrator callback. Accept and refuse-to-arbitrate complete
-    ///         the job; reject refunds the client. The dispute id is passed
-    ///         as the escrow's attestation reason.
+    /// the job; reject refunds the client. The dispute id is passed as the
+    /// escrow's attestation reason.
+    /// @param _disputeID The dispute.
+    /// @param _ruling The final ruling.
     function rule(uint256 _disputeID, uint256 _ruling) external {
-        if (msg.sender != address(arbitrator)) revert OnlyArbitrator();
-        if (_ruling > RULING_OPTIONS) revert InvalidRuling();
+        require(msg.sender == address(arbitrator), OnlyArbitrator());
+        require(_ruling <= RULING_OPTIONS, InvalidRuling());
         uint256 jobId = disputeToJob[_disputeID];
-        if (jobId == 0) revert UnknownDispute();
+        require(jobId != 0, UnknownDispute());
 
         emit Ruling(arbitrator, _disputeID, _ruling);
         if (_ruling == RULING_REJECT) {
@@ -133,4 +147,36 @@ contract KlerosEvaluator is IArbitrableV2 {
             escrow.complete(jobId, bytes32(_disputeID), "");
         }
     }
+
+    // ************************************* //
+    // *           Public Views            * //
+    // ************************************* //
+
+    /// @notice Creation-time checks only; funding is checked in acceptJob.
+    /// @param _jobId The job to check.
+    /// @return Whether the job's shape is acceptable.
+    function canAccept(uint256 _jobId) external view returns (bool) {
+        ERC8183.Job memory job = escrow.getJob(_jobId);
+        return job.evaluator == address(this) && job.expiredAt >= block.timestamp + minExpiryMargin;
+    }
+
+    // ************************************* //
+    // *              Errors               * //
+    // ************************************* //
+
+    error NotJobEvaluator();
+    error NotJobClient();
+    error JobNotFunded();
+    error JobNotSubmitted();
+    error AlreadyAccepted();
+    error NotAccepted();
+    error AlreadyChallenged();
+    error DisputePending();
+    error ChallengeWindowActive();
+    error ChallengeWindowOver();
+    error InsufficientArbitrationFee();
+    error OnlyArbitrator();
+    error UnknownDispute();
+    error InvalidRuling();
+    error RefundFailed();
 }

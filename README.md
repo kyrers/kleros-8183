@@ -18,7 +18,7 @@ Kleros integrates as the job's **evaluator**, via the `KlerosEvaluator` contract
 - **Submitted work is assumed correct unless the client challenges.** The alternative, assuming incorrect, would require paying for arbitration on every job. Disputes should only exist on actual disagreement.
 - **Only the client can challenge.** The optimistic default already favors the provider, so the client is the only party silence can hurt.
 - **Refuse to arbitrate completes the job.** Jurors declining to rule falls back to the default outcome. Any default favors one side; this one is consistent with the optimistic design.
-- **No fee shifting.** The arbitration fee pays jurors, win or lose.
+- **No arbitration fee return.** The client pays the arbitration fee and is not refunded, even if he wins.
 - **Claims are ignored.** The escrow's claim system gets no policy in v1.
 - **Rulings are binary.** `complete()` or `reject()` is all the current spec allows a ruling to enforce.
 
