@@ -21,6 +21,7 @@ Kleros integrates as the job's **evaluator**, via the `KlerosEvaluator` contract
 - **No arbitration fee return.** The client pays the arbitration fee and is not refunded, even if he wins.
 - **Claims are ignored.** The escrow's claim system gets no policy in v1.
 - **Rulings are binary.** `complete()` or `reject()` is all the current spec allows a ruling to enforce.
+- **Evaluator fees exist.** Even if Kleros wants no evaluator fee, only the escrow's admin (a given marketplace) sets them. To integrate with marketplaces that force evaluator fees, the `KlerosEvaluator` contract owner can collect them via `collectEvaluatorFees`, otherwise fees would just be lost.
 
 ## Setup
 
