@@ -101,12 +101,18 @@ contract KlerosEvaluator is IArbitrableV2 {
         ERC8183.Job memory job = escrow.getJob(_jobId);
         require(msg.sender == job.client, NotJobClient());
         require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
-        require(block.timestamp <= job.submittedAt + challengeWindow, ChallengeWindowOver());
+        require(
+            block.timestamp <= job.submittedAt + challengeWindow,
+            ChallengeWindowOver()
+        );
 
         uint256 cost = arbitrator.arbitrationCost(arbitratorExtraData);
         require(msg.value >= cost, InsufficientArbitrationFee());
         challenged[_jobId] = true;
-        uint256 disputeId = arbitrator.createDispute{value: cost}(RULING_OPTIONS, arbitratorExtraData);
+        uint256 disputeId = arbitrator.createDispute{value: cost}(
+            RULING_OPTIONS,
+            arbitratorExtraData
+        );
         disputeToJob[disputeId] = _jobId;
         emit Challenged(_jobId, disputeId);
 
@@ -124,7 +130,10 @@ contract KlerosEvaluator is IArbitrableV2 {
         require(!challenged[_jobId], DisputePending());
         ERC8183.Job memory job = escrow.getJob(_jobId);
         require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
-        require(block.timestamp > job.submittedAt + challengeWindow, ChallengeWindowActive());
+        require(
+            block.timestamp > job.submittedAt + challengeWindow,
+            ChallengeWindowActive()
+        );
 
         escrow.complete(_jobId, bytes32(0), "");
     }
@@ -157,7 +166,9 @@ contract KlerosEvaluator is IArbitrableV2 {
     /// @return Whether the job's shape is acceptable.
     function canAccept(uint256 _jobId) external view returns (bool) {
         ERC8183.Job memory job = escrow.getJob(_jobId);
-        return job.evaluator == address(this) && job.expiredAt >= block.timestamp + minExpiryMargin;
+        return
+            job.evaluator == address(this) &&
+            job.expiredAt >= block.timestamp + minExpiryMargin;
     }
 
     // ************************************* //
