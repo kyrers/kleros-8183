@@ -18,13 +18,21 @@ interface IArbitrableV2 {
     /// @param _arbitrator The arbitrator of the contract.
     /// @param _arbitratorDisputeID The identifier of the dispute in the Arbitrator contract.
     /// @param _templateId The identifier of the dispute template.
-    event DisputeRequest(IArbitratorV2 indexed _arbitrator, uint256 indexed _arbitratorDisputeID, uint256 _templateId);
+    event DisputeRequest(
+        IArbitratorV2 indexed _arbitrator,
+        uint256 indexed _arbitratorDisputeID,
+        uint256 _templateId
+    );
 
     /// @notice To be raised when a ruling is given.
     /// @param _arbitrator The arbitrator giving the ruling.
     /// @param _disputeID The identifier of the dispute in the Arbitrator contract.
     /// @param _ruling The ruling which was given.
-    event Ruling(IArbitratorV2 indexed _arbitrator, uint256 indexed _disputeID, uint256 _ruling);
+    event Ruling(
+        IArbitratorV2 indexed _arbitrator,
+        uint256 indexed _disputeID,
+        uint256 _ruling
+    );
 
     // ************************************* //
     // *         State Modifiers           * //

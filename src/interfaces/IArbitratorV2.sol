@@ -16,19 +16,30 @@ interface IArbitratorV2 {
     /// @notice To be emitted when a dispute is created.
     /// @param _disputeID The identifier of the dispute in the Arbitrator contract.
     /// @param _arbitrable The contract which created the dispute.
-    event DisputeCreation(uint256 indexed _disputeID, IArbitrableV2 indexed _arbitrable);
+    event DisputeCreation(
+        uint256 indexed _disputeID,
+        IArbitrableV2 indexed _arbitrable
+    );
 
     /// @notice To be raised when a ruling is given.
     /// @param _arbitrable The arbitrable receiving the ruling.
     /// @param _disputeID The identifier of the dispute in the Arbitrator contract.
     /// @param _ruling The ruling which was given.
-    event Ruling(IArbitrableV2 indexed _arbitrable, uint256 indexed _disputeID, uint256 _ruling);
+    event Ruling(
+        IArbitrableV2 indexed _arbitrable,
+        uint256 indexed _disputeID,
+        uint256 _ruling
+    );
 
     /// @notice To be raised when a ruling is relayed to arbitrable.
     /// @param _arbitrable The arbitrable receiving the ruling.
     /// @param _disputeID The identifier of the dispute in the Arbitrator contract.
     /// @param _ruling The ruling which was executed.
-    event RulingExecuted(IArbitrableV2 indexed _arbitrable, uint256 indexed _disputeID, uint256 _ruling);
+    event RulingExecuted(
+        IArbitrableV2 indexed _arbitrable,
+        uint256 indexed _disputeID,
+        uint256 _ruling
+    );
 
     /// @notice To be emitted when an ERC20 token is added or removed as a method to pay fees.
     /// @param _token The ERC20 token.
@@ -71,19 +82,26 @@ interface IArbitratorV2 {
     /// @dev It is recommended not to increase it often, as it can be highly time and gas consuming for the arbitrated contracts to cope with fee augmentation.
     /// @param _extraData Additional info about the dispute. We use it to pass the ID of the dispute's court (first 32 bytes), the minimum number of jurors required (next 32 bytes) and the ID of the specific dispute kit (last 32 bytes).
     /// @return cost The arbitration cost in ETH.
-    function arbitrationCost(bytes calldata _extraData) external view returns (uint256 cost);
+    function arbitrationCost(
+        bytes calldata _extraData
+    ) external view returns (uint256 cost);
 
     /// @notice Compute the cost of arbitration denominated in `_feeToken`.
     /// @dev It is recommended not to increase it often, as it can be highly time and gas consuming for the arbitrated contracts to cope with fee augmentation.
     /// @param _extraData Additional info about the dispute. We use it to pass the ID of the dispute's court (first 32 bytes), the minimum number of jurors required (next 32 bytes) and the ID of the specific dispute kit (last 32 bytes).
     /// @param _feeToken The ERC20 token used to pay fees.
     /// @return cost The arbitration cost in `_feeToken`.
-    function arbitrationCost(bytes calldata _extraData, IERC20 _feeToken) external view returns (uint256 cost);
+    function arbitrationCost(
+        bytes calldata _extraData,
+        IERC20 _feeToken
+    ) external view returns (uint256 cost);
 
     /// @notice Gets the current ruling of a specified dispute.
     /// @param _disputeID The ID of the dispute.
     /// @return ruling The current ruling.
     /// @return tied Whether it's a tie or not.
     /// @return overridden Whether the ruling was overridden by appeal funding or not.
-    function currentRuling(uint256 _disputeID) external view returns (uint256 ruling, bool tied, bool overridden);
+    function currentRuling(
+        uint256 _disputeID
+    ) external view returns (uint256 ruling, bool tied, bool overridden);
 }
