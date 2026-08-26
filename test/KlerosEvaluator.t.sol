@@ -6,6 +6,7 @@ import {ERC8183} from "erc8183/ERC8183.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {KlerosEvaluator} from "../src/KlerosEvaluator.sol";
 import {IArbitrableV2} from "../src/interfaces/IArbitrableV2.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
 import {MockArbitrator} from "./mocks/MockArbitrator.sol";
 
@@ -28,6 +29,7 @@ contract KlerosEvaluatorTest is Test {
     address client = makeAddr("client");
     address provider = makeAddr("provider");
     address treasury = makeAddr("treasury");
+    address evaluatorFeeRecipient = makeAddr("evaluatorFeeRecipient");
 
     function setUp() public {
         // The escrow is deployed exactly as its authors intend: implementation
@@ -47,6 +49,7 @@ contract KlerosEvaluatorTest is Test {
         escrow.setPaymentTokenAllowed(address(token), true);
         arbitrator = new MockArbitrator();
         evaluator = new KlerosEvaluator(
+            address(this),
             escrow,
             arbitrator,
             "",
@@ -391,6 +394,34 @@ contract KlerosEvaluatorTest is Test {
         vm.prank(address(arbitrator));
         vm.expectRevert(KlerosEvaluator.InvalidRuling.selector);
         evaluator.rule(disputeId, 3);
+    }
+
+    function test_CollectEvaluatorFees_OwnerCollects() public {
+        escrow.setEvaluatorFee(200); // 2%, set by the escrow admin (this test contract)
+        uint256 fee = (BUDGET * 200) / 10000;
+        uint256 jobId = createSubmittedJob();
+
+        vm.warp(block.timestamp + CHALLENGE_WINDOW + 1);
+        evaluator.finalize(jobId);
+        assertEq(token.balanceOf(provider), BUDGET - fee);
+        assertEq(token.balanceOf(address(evaluator)), fee);
+
+        evaluator.collectEvaluatorFees(token, evaluatorFeeRecipient);
+        assertEq(token.balanceOf(evaluatorFeeRecipient), fee);
+        assertEq(token.balanceOf(address(evaluator)), 0);
+    }
+
+    function test_CollectEvaluatorFees_RevertsWhenNotOwner() public {
+        vm.prank(client);
+        vm.expectRevert(KlerosEvaluator.OwnerOnly.selector);
+        evaluator.collectEvaluatorFees(token, evaluatorFeeRecipient);
+    }
+
+    function test_ChangeOwner() public {
+        evaluator.changeOwner(client);
+        assertEq(evaluator.owner(), client);
+        vm.expectRevert(KlerosEvaluator.OwnerOnly.selector);
+        evaluator.changeOwner(address(this));
     }
 
     function test_Rule_EmitsRuling() public {

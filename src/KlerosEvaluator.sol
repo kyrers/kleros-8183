@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC8183} from "erc8183/ERC8183.sol";
 import {IArbitratorV2} from "./interfaces/IArbitratorV2.sol";
 import {IArbitrableV2} from "./interfaces/IArbitrableV2.sol";
@@ -11,9 +13,13 @@ import {IArbitrableV2} from "./interfaces/IArbitrableV2.sol";
 /// window; a challenge creates a dispute on the arbitrator and the ruling is
 /// enforced on the escrow. Design choices in the README.
 contract KlerosEvaluator is IArbitrableV2 {
+    using SafeERC20 for IERC20;
+
     // ************************************* //
     // *             Storage               * //
     // ************************************* //
+
+    address public owner; // The owner. Can only change ownership and collect this contract's fee earnings.
 
     uint256 public constant RULING_OPTIONS = 2; // Number of ruling choices: accept or reject the submission.
     uint256 public constant RULING_ACCEPT = 1; // The submission is acceptable.
@@ -47,26 +53,59 @@ contract KlerosEvaluator is IArbitrableV2 {
     event Challenged(uint256 indexed _jobId, uint256 indexed _disputeId);
 
     // ************************************* //
+    // *        Function Modifiers         * //
+    // ************************************* //
+
+    modifier onlyByOwner() {
+        require(owner == msg.sender, OwnerOnly());
+        _;
+    }
+
+    // ************************************* //
     // *            Constructor            * //
     // ************************************* //
 
+    /// @param _owner The owner.
     /// @param _escrow The ERC-8183 escrow to evaluate for.
     /// @param _arbitrator The Kleros arbitrator.
     /// @param _arbitratorExtraData Arbitrator configuration (court, number of jurors).
     /// @param _challengeWindow Seconds after submission during which the client can challenge.
     /// @param _minExpiryMargin Minimum seconds between acceptance and job expiry.
     constructor(
+        address _owner,
         ERC8183 _escrow,
         IArbitratorV2 _arbitrator,
         bytes memory _arbitratorExtraData,
         uint256 _challengeWindow,
         uint256 _minExpiryMargin
     ) {
+        owner = _owner;
         escrow = _escrow;
         arbitrator = _arbitrator;
         arbitratorExtraData = _arbitratorExtraData;
         challengeWindow = _challengeWindow;
         minExpiryMargin = _minExpiryMargin;
+    }
+
+    // ************************************* //
+    // *           Governance              * //
+    // ************************************* //
+
+    /// @notice Changes the owner.
+    /// @param _owner The address of the new owner.
+    function changeOwner(address _owner) external onlyByOwner {
+        owner = _owner;
+    }
+
+    /// @notice Collects this contract's balance of a token
+    /// Some marketplaces might force evaluator fees, and we don't want them to be stuck in this contract.
+    /// @param _token The token to collect.
+    /// @param _to The address receiving the balance.
+    function collectEvaluatorFees(
+        IERC20 _token,
+        address _to
+    ) external onlyByOwner {
+        _token.safeTransfer(_to, _token.balanceOf(address(this)));
     }
 
     // ************************************* //
@@ -175,6 +214,7 @@ contract KlerosEvaluator is IArbitrableV2 {
     // *              Errors               * //
     // ************************************* //
 
+    error OwnerOnly();
     error NotJobEvaluator();
     error NotJobClient();
     error JobNotFunded();
