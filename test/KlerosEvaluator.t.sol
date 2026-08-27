@@ -9,6 +9,7 @@ import {IArbitrableV2} from "../src/interfaces/IArbitrableV2.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
 import {MockArbitrator} from "./mocks/MockArbitrator.sol";
+import {MockTemplateRegistry} from "./mocks/MockTemplateRegistry.sol";
 
 /// @dev A client with no receive function, so the excess refund in challenge() fails.
 contract RejectingClient {
@@ -20,10 +21,13 @@ contract KlerosEvaluatorTest is Test {
     uint256 constant CHALLENGE_WINDOW = 1 days;
     uint256 constant MIN_EXPIRY_MARGIN = 14 days;
     uint48 constant JOB_LIFETIME = 30 days;
+    string constant TEMPLATE_DATA = "template data";
+    string constant TEMPLATE_MAPPINGS = "template mappings";
 
     ERC8183 escrow;
     TestERC20 token;
     MockArbitrator arbitrator;
+    MockTemplateRegistry templateRegistry;
     KlerosEvaluator evaluator;
 
     address client = makeAddr("client");
@@ -48,13 +52,19 @@ contract KlerosEvaluatorTest is Test {
         token = new TestERC20();
         escrow.setPaymentTokenAllowed(address(token), true);
         arbitrator = new MockArbitrator();
+        templateRegistry = new MockTemplateRegistry();
+        // Occupy template id 0, so asserting the evaluator's id is meaningful.
+        templateRegistry.setDisputeTemplate("", "taken", "");
         evaluator = new KlerosEvaluator(
             address(this),
             escrow,
             arbitrator,
             "",
             CHALLENGE_WINDOW,
-            MIN_EXPIRY_MARGIN
+            MIN_EXPIRY_MARGIN,
+            templateRegistry,
+            TEMPLATE_DATA,
+            TEMPLATE_MAPPINGS
         );
 
         vm.deal(client, 1 ether);
@@ -179,6 +189,16 @@ contract KlerosEvaluatorTest is Test {
     }
 
     // ************************************* //
+    // *          dispute template         * //
+    // ************************************* //
+
+    function test_Constructor_RegistersDisputeTemplate() public view {
+        assertEq(evaluator.templateId(), 1);
+        assertEq(templateRegistry.templateData(1), TEMPLATE_DATA);
+        assertEq(templateRegistry.templateDataMappings(1), TEMPLATE_MAPPINGS);
+    }
+
+    // ************************************* //
     // *            acceptJob              * //
     // ************************************* //
 
@@ -255,6 +275,72 @@ contract KlerosEvaluatorTest is Test {
     }
 
     // ************************************* //
+    // *        registerDeliverable        * //
+    // ************************************* //
+
+    function test_RegisterDeliverable_StoresAndEmits() public {
+        uint256 jobId = createSubmittedJob();
+        vm.prank(provider);
+        vm.expectEmit();
+        emit KlerosEvaluator.DeliverableRegistered(jobId, "ipfs://deliverable");
+        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        assertEq(evaluator.deliverableURIs(jobId), "ipfs://deliverable");
+    }
+
+    /// Overwriting is allowed; the escrow's hash commitment is the anchor.
+    function test_RegisterDeliverable_OverwriteAllowed() public {
+        uint256 jobId = createSubmittedJob();
+        vm.startPrank(provider);
+        evaluator.registerDeliverable(jobId, "ipfs://wrong");
+        evaluator.registerDeliverable(jobId, "ipfs://fixed");
+        vm.stopPrank();
+        assertEq(evaluator.deliverableURIs(jobId), "ipfs://fixed");
+    }
+
+    /// A dispute doesn't move the job out of Submitted, so a provider who
+    /// forgot to register can still do it mid-dispute.
+    function test_RegisterDeliverable_WorksMidDispute() public {
+        uint256 jobId = createSubmittedJob();
+        challengeJob(jobId);
+        vm.prank(provider);
+        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        assertEq(evaluator.deliverableURIs(jobId), "ipfs://deliverable");
+    }
+
+    /// The disclosure record closes with the job: no rewriting history
+    /// after the ruling.
+    function test_RegisterDeliverable_RevertsAfterRuling() public {
+        uint256 jobId = createSubmittedJob();
+        uint256 disputeId = challengeJob(jobId);
+        arbitrator.giveRuling(disputeId, evaluator.RULING_REJECT());
+
+        vm.prank(provider);
+        vm.expectRevert(KlerosEvaluator.JobNotSubmitted.selector);
+        evaluator.registerDeliverable(jobId, "ipfs://rewritten-history");
+    }
+
+    function test_RegisterDeliverable_RevertsWhenNotProvider() public {
+        uint256 jobId = createSubmittedJob();
+        vm.prank(client);
+        vm.expectRevert(KlerosEvaluator.NotJobProvider.selector);
+        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+    }
+
+    function test_RegisterDeliverable_RevertsWhenNotAccepted() public {
+        uint256 jobId = createFundedJob(JOB_LIFETIME);
+        vm.prank(provider);
+        vm.expectRevert(KlerosEvaluator.NotAccepted.selector);
+        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+    }
+
+    function test_RegisterDeliverable_RevertsWhenNotSubmitted() public {
+        uint256 jobId = createAcceptedJob();
+        vm.prank(provider);
+        vm.expectRevert(KlerosEvaluator.JobNotSubmitted.selector);
+        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+    }
+
+    // ************************************* //
     // *             challenge             * //
     // ************************************* //
 
@@ -328,6 +414,16 @@ contract KlerosEvaluatorTest is Test {
         vm.prank(client);
         vm.expectEmit();
         emit KlerosEvaluator.Challenged(jobId, 0); // the mock's first dispute id
+        evaluator.challenge{value: cost}(jobId);
+    }
+
+    function test_Challenge_EmitsDisputeRequest() public {
+        uint256 jobId = createSubmittedJob();
+        uint256 cost = arbitrator.COST();
+        uint256 templateId = evaluator.templateId();
+        vm.prank(client);
+        vm.expectEmit();
+        emit IArbitrableV2.DisputeRequest(arbitrator, 0, templateId);
         evaluator.challenge{value: cost}(jobId);
     }
 

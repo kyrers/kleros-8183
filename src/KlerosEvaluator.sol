@@ -6,12 +6,15 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ERC8183} from "erc8183/ERC8183.sol";
 import {IArbitratorV2} from "./interfaces/IArbitratorV2.sol";
 import {IArbitrableV2} from "./interfaces/IArbitrableV2.sol";
+import {IDisputeTemplateRegistry} from "./interfaces/IDisputeTemplateRegistry.sol";
 
 /// @title KlerosEvaluator
 /// @notice ERC-8183 evaluator backed by Kleros arbitration. Submitted work
 /// completes optimistically unless the client challenges within the challenge
 /// window; a challenge creates a dispute on the arbitrator and the ruling is
-/// enforced on the escrow. Design choices in the README.
+/// enforced on the escrow. Disputes point to a dispute template registered at
+/// deployment and providers disclose delivered content via registerDeliverable, making cases readable to jurors.
+/// Design choices in the README.
 contract KlerosEvaluator is IArbitrableV2 {
     using SafeERC20 for IERC20;
 
@@ -29,11 +32,13 @@ contract KlerosEvaluator is IArbitrableV2 {
     IArbitratorV2 public immutable arbitrator; // The Kleros arbitrator.
     uint256 public immutable challengeWindow; // Seconds after submission during which the client can challenge.
     uint256 public immutable minExpiryMargin; // Minimum seconds between acceptance and job expiry.
+    uint256 public immutable templateId; // The dispute template every dispute points to.
     bytes public arbitratorExtraData; // Arbitrator configuration (court, number of jurors).
 
     mapping(uint256 jobId => bool) public accepted; // Jobs this contract agreed to serve.
     mapping(uint256 jobId => bool) public challenged; // Jobs whose submission was disputed.
     mapping(uint256 disputeId => uint256 jobId) public disputeToJob; // Maps arbitrator dispute IDs to job IDs.
+    mapping(uint256 jobId => string) public deliverableURIs; // Provider-disclosed content behind the deliverable hash committed on the escrow.
 
     // ************************************* //
     // *              Events               * //
@@ -46,6 +51,11 @@ contract KlerosEvaluator is IArbitrableV2 {
     /// @notice Emitted when this contract refuses a job and rejects it on the escrow.
     /// @param _jobId The job.
     event JobRefused(uint256 indexed _jobId);
+
+    /// @notice Emitted when the provider registers the content behind the deliverable hash committed on the escrow.
+    /// @param _jobId The job.
+    /// @param _deliverableURI Reference to the delivered content.
+    event DeliverableRegistered(uint256 indexed _jobId, string _deliverableURI);
 
     /// @notice Emitted when the client challenges a submission.
     /// @param _jobId The job.
@@ -71,13 +81,19 @@ contract KlerosEvaluator is IArbitrableV2 {
     /// @param _arbitratorExtraData Arbitrator configuration (court, number of jurors).
     /// @param _challengeWindow Seconds after submission during which the client can challenge.
     /// @param _minExpiryMargin Minimum seconds between acceptance and job expiry.
+    /// @param _templateRegistry The dispute template registry.
+    /// @param _templateData The dispute template data.
+    /// @param _templateDataMappings The dispute template data mappings.
     constructor(
         address _owner,
         ERC8183 _escrow,
         IArbitratorV2 _arbitrator,
         bytes memory _arbitratorExtraData,
         uint256 _challengeWindow,
-        uint256 _minExpiryMargin
+        uint256 _minExpiryMargin,
+        IDisputeTemplateRegistry _templateRegistry,
+        string memory _templateData,
+        string memory _templateDataMappings
     ) {
         owner = _owner;
         escrow = _escrow;
@@ -85,6 +101,11 @@ contract KlerosEvaluator is IArbitrableV2 {
         arbitratorExtraData = _arbitratorExtraData;
         challengeWindow = _challengeWindow;
         minExpiryMargin = _minExpiryMargin;
+        templateId = _templateRegistry.setDisputeTemplate(
+            "",
+            _templateData,
+            _templateDataMappings
+        );
     }
 
     // ************************************* //
@@ -131,6 +152,25 @@ contract KlerosEvaluator is IArbitrableV2 {
         }
     }
 
+    /// @notice The provider registers a reference to the content behind the
+    /// deliverable hash committed on the escrow, so jurors can access it if a
+    /// dispute arises. Overwriting is harmless: the escrow's hash commitment
+    /// is what the jurors will verify the content against.
+    /// @param _jobId The job the content belongs to.
+    /// @param _deliverableURI Reference to the delivered content.
+    function registerDeliverable(
+        uint256 _jobId,
+        string calldata _deliverableURI
+    ) external {
+        require(accepted[_jobId], NotAccepted());
+        ERC8183.Job memory job = escrow.getJob(_jobId);
+        require(msg.sender == job.provider, NotJobProvider());
+        require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
+
+        deliverableURIs[_jobId] = _deliverableURI;
+        emit DeliverableRegistered(_jobId, _deliverableURI);
+    }
+
     /// @notice The client disputes the submitted work within the challenge
     /// window, paying the arbitration fee. Excess is refunded.
     /// @param _jobId The job whose submission is disputed.
@@ -154,6 +194,7 @@ contract KlerosEvaluator is IArbitrableV2 {
         );
         disputeToJob[disputeId] = _jobId;
         emit Challenged(_jobId, disputeId);
+        emit DisputeRequest(arbitrator, disputeId, templateId);
 
         if (msg.value > cost) {
             (bool success, ) = msg.sender.call{value: msg.value - cost}("");
@@ -217,6 +258,7 @@ contract KlerosEvaluator is IArbitrableV2 {
     error OwnerOnly();
     error NotJobEvaluator();
     error NotJobClient();
+    error NotJobProvider();
     error JobNotFunded();
     error JobNotSubmitted();
     error AlreadyAccepted();

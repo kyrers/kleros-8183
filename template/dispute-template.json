@@ -1,0 +1,25 @@
+{
+  "title": "ERC-8183: Does the delivered work satisfy the agreement?",
+  "description": "ERC-8183 escrow job {{jobId}}, on escrow {{escrowAddress}}, was challenged by the client.\n\n**The agreement**: {{description}}\n\n**The deliverable hash** committed by the provider at submission: {{deliverable}}\n\n**The delivered content** registered by the provider: {{deliverableURI}}",
+  "question": "Does the submitted work satisfy the agreement?",
+  "answers": [
+    {
+      "id": "0x1",
+      "title": "Yes, accept",
+      "description": "The submission fulfills the agreement."
+    },
+    {
+      "id": "0x2",
+      "title": "No, reject",
+      "description": "The submission does not fulfill the agreement."
+    }
+  ],
+  "aliases": {
+    "Client": "{{client}}",
+    "Provider": "{{provider}}"
+  },
+  "policyURI": "/ipfs/Qmb41KsGE8xH8H8G26tEfhGHXLsiNLbCVgA8aBtSSVWe6b",
+  "arbitratorChainID": "421614",
+  "arbitratorAddress": "0x244e65F833Be5Ab13c20a00EBc40940BD3514d4C",
+  "version": "1.0"
+}
