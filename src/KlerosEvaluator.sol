@@ -102,7 +102,7 @@ contract KlerosEvaluator is IArbitrableV2 {
         challengeWindow = _challengeWindow;
         minExpiryMargin = _minExpiryMargin;
         templateId = _templateRegistry.setDisputeTemplate(
-            "",
+            "Kleros8183Evaluator",
             _templateData,
             _templateDataMappings
         );
@@ -144,7 +144,7 @@ contract KlerosEvaluator is IArbitrableV2 {
         require(!accepted[_jobId], AlreadyAccepted());
 
         if (job.expiredAt < block.timestamp + minExpiryMargin) {
-            escrow.reject(_jobId, bytes32(0), "");
+            escrow.reject(_jobId, "expiry inside margin", "");
             emit JobRefused(_jobId);
         } else {
             accepted[_jobId] = true;
@@ -215,7 +215,7 @@ contract KlerosEvaluator is IArbitrableV2 {
             ChallengeWindowActive()
         );
 
-        escrow.complete(_jobId, bytes32(0), "");
+        escrow.complete(_jobId, "no challenge within window", "");
     }
 
     /// @notice Arbitrator callback. Accept and refuse-to-arbitrate complete

@@ -140,6 +140,12 @@ contract KlerosEvaluatorTest is Test {
         assertEq(token.balanceOf(address(escrow)), BUDGET); // escrowed while pending
 
         vm.warp(block.timestamp + CHALLENGE_WINDOW + 1);
+        vm.expectEmit();
+        emit ERC8183.JobCompleted(
+            jobId,
+            address(evaluator),
+            "no challenge within window"
+        );
         evaluator.finalize(jobId);
 
         assertJobStatus(jobId, ERC8183.JobStatus.Completed);
@@ -158,6 +164,8 @@ contract KlerosEvaluatorTest is Test {
         uint256 jobId = createSubmittedJob();
         uint256 disputeId = challengeJob(jobId);
 
+        vm.expectEmit();
+        emit ERC8183.JobCompleted(jobId, address(evaluator), bytes32(disputeId));
         arbitrator.giveRuling(disputeId, evaluator.RULING_ACCEPT());
 
         assertJobStatus(jobId, ERC8183.JobStatus.Completed);
@@ -170,6 +178,8 @@ contract KlerosEvaluatorTest is Test {
         uint256 jobId = createSubmittedJob();
         uint256 disputeId = challengeJob(jobId);
 
+        vm.expectEmit();
+        emit ERC8183.JobRejected(jobId, address(evaluator), bytes32(disputeId));
         arbitrator.giveRuling(disputeId, evaluator.RULING_REJECT());
 
         assertJobStatus(jobId, ERC8183.JobStatus.Rejected);
@@ -182,6 +192,8 @@ contract KlerosEvaluatorTest is Test {
         uint256 jobId = createSubmittedJob();
         uint256 disputeId = challengeJob(jobId);
 
+        vm.expectEmit();
+        emit ERC8183.JobCompleted(jobId, address(evaluator), bytes32(disputeId));
         arbitrator.giveRuling(disputeId, 0);
 
         assertJobStatus(jobId, ERC8183.JobStatus.Completed);
@@ -194,6 +206,7 @@ contract KlerosEvaluatorTest is Test {
 
     function test_Constructor_RegistersDisputeTemplate() public view {
         assertEq(evaluator.templateId(), 1);
+        assertEq(templateRegistry.templateTags(1), "Kleros8183Evaluator");
         assertEq(templateRegistry.templateData(1), TEMPLATE_DATA);
         assertEq(templateRegistry.templateDataMappings(1), TEMPLATE_MAPPINGS);
     }
@@ -206,6 +219,12 @@ contract KlerosEvaluatorTest is Test {
         uint256 jobId = createFundedJob(uint48(MIN_EXPIRY_MARGIN) - 1);
 
         vm.prank(client);
+        vm.expectEmit();
+        emit ERC8183.JobRejected(
+            jobId,
+            address(evaluator),
+            "expiry inside margin"
+        );
         vm.expectEmit();
         emit KlerosEvaluator.JobRefused(jobId);
         evaluator.acceptJob(jobId);
