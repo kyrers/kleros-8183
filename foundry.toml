@@ -8,6 +8,9 @@ evm_version = "cancun"
 optimizer = true
 optimizer_runs = 200
 
+# The deploy script reads the dispute template artifacts.
+fs_permissions = [{ access = "read", path = "./template" }]
+
 #OpenZeppelin dependencies also resolve from the base-contracts repository, so it and the PoC use the exact same versions.
 remappings = [
     "erc8183/=lib/base-contracts/contracts/",
