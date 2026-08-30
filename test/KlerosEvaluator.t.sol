@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {ERC8183} from "erc8183/ERC8183.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {KlerosEvaluator} from "../src/KlerosEvaluator.sol";
+import {KlerosEvaluatorView} from "../src/KlerosEvaluatorView.sol";
 import {IArbitrableV2} from "../src/interfaces/IArbitrableV2.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
@@ -206,6 +207,58 @@ contract KlerosEvaluatorTest is Test {
 
         assertJobStatus(jobId, ERC8183.JobStatus.Completed);
         assertEq(token.balanceOf(provider), BUDGET);
+    }
+
+    /// The view aggregator returns exactly what the dispute template renders.
+    function test_View_ReturnsDisputeData() public {
+        KlerosEvaluatorView viewer = new KlerosEvaluatorView();
+        uint256 jobId = createSubmittedJob();
+        vm.prank(provider);
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
+        uint256 disputeId = challengeJob(jobId);
+
+        KlerosEvaluatorView.DisputeData memory data = viewer.disputeData(
+            evaluator,
+            disputeId
+        );
+        assertEq(data.jobId, jobId);
+        assertEq(data.escrowAddress, address(escrow));
+        assertEq(data.deliverableURI, "ipfs://deliverable");
+        assertEq(data.deliverable, keccak256("deliverable"));
+        assertEq(data.client, client);
+        assertEq(data.provider, provider);
+        assertEq(data.description, "a job");
+    }
+
+    /// A challenged job with nothing registered reads back empty, it doesn't revert.
+    function test_View_EmptyWhenNotRegistered() public {
+        KlerosEvaluatorView viewer = new KlerosEvaluatorView();
+        uint256 jobId = createSubmittedJob();
+        uint256 disputeId = challengeJob(jobId);
+
+        KlerosEvaluatorView.DisputeData memory data = viewer.disputeData(
+            evaluator,
+            disputeId
+        );
+        assertEq(data.jobId, jobId);
+        assertEq(data.deliverableURI, "");
+        assertEq(data.deliverable, bytes32(0));
+    }
+
+    /// Unknown dispute ids map to job 0, which reads back as an empty job.
+    function test_View_EmptyOnUnknownDispute() public {
+        KlerosEvaluatorView viewer = new KlerosEvaluatorView();
+        KlerosEvaluatorView.DisputeData memory data = viewer.disputeData(
+            evaluator,
+            999
+        );
+        assertEq(data.jobId, 0);
+        assertEq(data.client, address(0));
+        assertEq(data.description, "");
     }
 
     // ************************************* //

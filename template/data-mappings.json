@@ -1,47 +1,27 @@
 [
   {
     "type": "abi/call",
-    "abi": "function disputeToJob(uint256) view returns (uint256)",
-    "address": "{{arbitrableAddress}}",
-    "args": ["{{arbitratorDisputeID}}"],
-    "seek": ["value"],
-    "populate": ["jobId"],
-    "functionName": "disputeToJob"
-  },
-  {
-    "type": "abi/call",
-    "abi": "function escrow() view returns (address)",
-    "address": "{{arbitrableAddress}}",
-    "args": [],
-    "seek": ["value"],
-    "populate": ["escrowAddress"],
-    "functionName": "escrow"
-  },
-  {
-    "type": "abi/call",
-    "abi": "function deliverableURIs(uint256) view returns (string)",
-    "address": "{{arbitrableAddress}}",
-    "args": ["{{jobId}}"],
-    "seek": ["value"],
-    "populate": ["deliverableURI"],
-    "functionName": "deliverableURIs"
-  },
-  {
-    "type": "abi/call",
-    "abi": "function getJob(uint256 jobId) view returns ((address client, uint8 status, address provider, uint48 expiredAt, address evaluator, uint48 submittedAt, uint256 budget, address hook, address paymentToken, uint256 providerAgentId, string description, uint256 settledAmount, address payoutReceiver) job)",
-    "address": "{{escrowAddress}}",
-    "args": ["{{jobId}}"],
-    "seek": ["client", "provider", "description"],
-    "populate": ["client", "provider", "description"],
-    "functionName": "getJob"
-  },
-  {
-    "type": "abi/call",
-    "abi": "function deliverableHashes(uint256) view returns (bytes32)",
-    "address": "{{arbitrableAddress}}",
-    "args": ["{{jobId}}"],
-    "seek": ["value"],
-    "populate": ["deliverable"],
-    "functionName": "deliverableHashes"
+    "abi": "function disputeData(address evaluator, uint256 disputeId) view returns ((uint256 jobId, address escrowAddress, string deliverableURI, bytes32 deliverable, address client, address provider, string description) data)",
+    "address": "0xA36902CF1922732bAE257e1bdb3A4b942262c0e2",
+    "args": ["{{arbitrableAddress}}", "{{arbitratorDisputeID}}"],
+    "seek": [
+      "jobId",
+      "escrowAddress",
+      "deliverableURI",
+      "deliverable",
+      "client",
+      "provider",
+      "description"
+    ],
+    "populate": [
+      "jobId",
+      "escrowAddress",
+      "deliverableURI",
+      "deliverable",
+      "client",
+      "provider",
+      "description"
+    ],
+    "functionName": "disputeData"
   }
 ]
