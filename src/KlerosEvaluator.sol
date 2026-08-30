@@ -39,6 +39,7 @@ contract KlerosEvaluator is IArbitrableV2 {
     mapping(uint256 jobId => bool) public challenged; // Jobs whose submission was disputed.
     mapping(uint256 disputeId => uint256 jobId) public disputeToJob; // Maps arbitrator dispute IDs to job IDs.
     mapping(uint256 jobId => string) public deliverableURIs; // Provider-disclosed content behind the deliverable hash committed on the escrow.
+    mapping(uint256 jobId => bytes32) public deliverableHashes; // Provider-disclosed hash that should match the hash committed on the escrow. Stored here because the escrow does not store it, only emits it, making it hard to access.
 
     // ************************************* //
     // *              Events               * //
@@ -55,7 +56,12 @@ contract KlerosEvaluator is IArbitrableV2 {
     /// @notice Emitted when the provider registers the content behind the deliverable hash committed on the escrow.
     /// @param _jobId The job.
     /// @param _deliverableURI Reference to the delivered content.
-    event DeliverableRegistered(uint256 indexed _jobId, string _deliverableURI);
+    /// @param _deliverable The content hash, restating the escrow commitment.
+    event DeliverableRegistered(
+        uint256 indexed _jobId,
+        string _deliverableURI,
+        bytes32 _deliverable
+    );
 
     /// @notice Emitted when the client challenges a submission.
     /// @param _jobId The job.
@@ -153,14 +159,17 @@ contract KlerosEvaluator is IArbitrableV2 {
     }
 
     /// @notice The provider registers a reference to the content behind the
-    /// deliverable hash committed on the escrow, so jurors can access it if a
-    /// dispute arises. Overwriting is harmless: the escrow's hash commitment
-    /// is what the jurors will verify the content against.
+    /// deliverable hash committed on the escrow, restating that hash, so
+    /// jurors can access and verify the content if a dispute arises.
+    /// Overwriting is harmless and lying is self-defeating: the escrow's
+    /// hash commitment is what the jurors will verify the content against.
     /// @param _jobId The job the content belongs to.
     /// @param _deliverableURI Reference to the delivered content.
+    /// @param _deliverable The content hash, restating the escrow commitment.
     function registerDeliverable(
         uint256 _jobId,
-        string calldata _deliverableURI
+        string calldata _deliverableURI,
+        bytes32 _deliverable
     ) external {
         require(accepted[_jobId], NotAccepted());
         ERC8183.Job memory job = escrow.getJob(_jobId);
@@ -168,7 +177,8 @@ contract KlerosEvaluator is IArbitrableV2 {
         require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
 
         deliverableURIs[_jobId] = _deliverableURI;
-        emit DeliverableRegistered(_jobId, _deliverableURI);
+        deliverableHashes[_jobId] = _deliverable;
+        emit DeliverableRegistered(_jobId, _deliverableURI, _deliverable);
     }
 
     /// @notice The client disputes the submitted work within the challenge
@@ -194,7 +204,7 @@ contract KlerosEvaluator is IArbitrableV2 {
         );
         disputeToJob[disputeId] = _jobId;
         emit Challenged(_jobId, disputeId);
-        emit DisputeRequest(arbitrator, disputeId, templateId);
+        emit DisputeRequest(arbitrator, disputeId, _jobId, templateId, "");
 
         if (msg.value > cost) {
             (bool success, ) = msg.sender.call{value: msg.value - cost}("");

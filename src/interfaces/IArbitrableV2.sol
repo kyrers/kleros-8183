@@ -9,6 +9,7 @@ import {IArbitratorV2} from "./IArbitratorV2.sol";
 /// @dev When developing arbitrable contracts, we need to:
 /// - Define the action taken when a ruling is received by the contract.
 /// - Allow dispute creation which calls `arbitrator.createDispute{value: _fee}(_choices,_extraData)`.
+/// NOTE For PoC validity, this matches the Kleros v2 protocol version currently deployed on mainnet.
 interface IArbitrableV2 {
     // ************************************* //
     // *              Events               * //
@@ -17,11 +18,15 @@ interface IArbitrableV2 {
     /// @notice To be emitted when a dispute is created to link the correct template to the disputeID.
     /// @param _arbitrator The arbitrator of the contract.
     /// @param _arbitratorDisputeID The identifier of the dispute in the Arbitrator contract.
-    /// @param _templateId The identifier of the dispute template.
+    /// @param _externalDisputeID An identifier created outside Kleros by the protocol requesting arbitration.
+    /// @param _templateId The identifier of the dispute template. Should not be used with _templateUri.
+    /// @param _templateUri The URI to the dispute template. Should not be used with _templateId.
     event DisputeRequest(
         IArbitratorV2 indexed _arbitrator,
         uint256 indexed _arbitratorDisputeID,
-        uint256 _templateId
+        uint256 _externalDisputeID,
+        uint256 _templateId,
+        string _templateUri
     );
 
     /// @notice To be raised when a ruling is given.

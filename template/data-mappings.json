@@ -36,17 +36,12 @@
     "functionName": "getJob"
   },
   {
-    "type": "abi/event",
-    "abi": "event JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)",
-    "address": "{{escrowAddress}}",
-    "eventFilter": {
-      "fromBlock": "earliest",
-      "toBlock": "latest",
-      "args": {
-        "jobId": "{{jobId}}"
-      }
-    },
-    "seek": ["deliverable"],
-    "populate": ["deliverable"]
+    "type": "abi/call",
+    "abi": "function deliverableHashes(uint256) view returns (bytes32)",
+    "address": "{{arbitrableAddress}}",
+    "args": ["{{jobId}}"],
+    "seek": ["value"],
+    "populate": ["deliverable"],
+    "functionName": "deliverableHashes"
   }
 ]

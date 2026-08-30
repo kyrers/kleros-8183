@@ -165,7 +165,11 @@ contract KlerosEvaluatorTest is Test {
         uint256 disputeId = challengeJob(jobId);
 
         vm.expectEmit();
-        emit ERC8183.JobCompleted(jobId, address(evaluator), bytes32(disputeId));
+        emit ERC8183.JobCompleted(
+            jobId,
+            address(evaluator),
+            bytes32(disputeId)
+        );
         arbitrator.giveRuling(disputeId, evaluator.RULING_ACCEPT());
 
         assertJobStatus(jobId, ERC8183.JobStatus.Completed);
@@ -193,7 +197,11 @@ contract KlerosEvaluatorTest is Test {
         uint256 disputeId = challengeJob(jobId);
 
         vm.expectEmit();
-        emit ERC8183.JobCompleted(jobId, address(evaluator), bytes32(disputeId));
+        emit ERC8183.JobCompleted(
+            jobId,
+            address(evaluator),
+            bytes32(disputeId)
+        );
         arbitrator.giveRuling(disputeId, 0);
 
         assertJobStatus(jobId, ERC8183.JobStatus.Completed);
@@ -301,19 +309,37 @@ contract KlerosEvaluatorTest is Test {
         uint256 jobId = createSubmittedJob();
         vm.prank(provider);
         vm.expectEmit();
-        emit KlerosEvaluator.DeliverableRegistered(jobId, "ipfs://deliverable");
-        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        emit KlerosEvaluator.DeliverableRegistered(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
         assertEq(evaluator.deliverableURIs(jobId), "ipfs://deliverable");
+        assertEq(evaluator.deliverableHashes(jobId), keccak256("deliverable"));
     }
 
     /// Overwriting is allowed; the escrow's hash commitment is the anchor.
     function test_RegisterDeliverable_OverwriteAllowed() public {
         uint256 jobId = createSubmittedJob();
         vm.startPrank(provider);
-        evaluator.registerDeliverable(jobId, "ipfs://wrong");
-        evaluator.registerDeliverable(jobId, "ipfs://fixed");
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://wrong",
+            keccak256("wrong")
+        );
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://fixed",
+            keccak256("deliverable")
+        );
         vm.stopPrank();
         assertEq(evaluator.deliverableURIs(jobId), "ipfs://fixed");
+        assertEq(evaluator.deliverableHashes(jobId), keccak256("deliverable"));
     }
 
     /// A dispute doesn't move the job out of Submitted, so a provider who
@@ -322,7 +348,11 @@ contract KlerosEvaluatorTest is Test {
         uint256 jobId = createSubmittedJob();
         challengeJob(jobId);
         vm.prank(provider);
-        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
         assertEq(evaluator.deliverableURIs(jobId), "ipfs://deliverable");
     }
 
@@ -335,28 +365,44 @@ contract KlerosEvaluatorTest is Test {
 
         vm.prank(provider);
         vm.expectRevert(KlerosEvaluator.JobNotSubmitted.selector);
-        evaluator.registerDeliverable(jobId, "ipfs://rewritten-history");
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://rewritten-history",
+            keccak256("deliverable")
+        );
     }
 
     function test_RegisterDeliverable_RevertsWhenNotProvider() public {
         uint256 jobId = createSubmittedJob();
         vm.prank(client);
         vm.expectRevert(KlerosEvaluator.NotJobProvider.selector);
-        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
     }
 
     function test_RegisterDeliverable_RevertsWhenNotAccepted() public {
         uint256 jobId = createFundedJob(JOB_LIFETIME);
         vm.prank(provider);
         vm.expectRevert(KlerosEvaluator.NotAccepted.selector);
-        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
     }
 
     function test_RegisterDeliverable_RevertsWhenNotSubmitted() public {
         uint256 jobId = createAcceptedJob();
         vm.prank(provider);
         vm.expectRevert(KlerosEvaluator.JobNotSubmitted.selector);
-        evaluator.registerDeliverable(jobId, "ipfs://deliverable");
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://deliverable",
+            keccak256("deliverable")
+        );
     }
 
     // ************************************* //
@@ -442,7 +488,7 @@ contract KlerosEvaluatorTest is Test {
         uint256 templateId = evaluator.templateId();
         vm.prank(client);
         vm.expectEmit();
-        emit IArbitrableV2.DisputeRequest(arbitrator, 0, templateId);
+        emit IArbitrableV2.DisputeRequest(arbitrator, 0, jobId, templateId, "");
         evaluator.challenge{value: cost}(jobId);
     }
 

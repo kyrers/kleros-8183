@@ -1,17 +1,17 @@
 {
   "title": "ERC-8183: Does the delivered work satisfy the agreement?",
-  "description": "ERC-8183 escrow job {{jobId}}, on escrow {{escrowAddress}}, was challenged by the client.\n\n**The agreement**: {{description}}\n\n**The deliverable hash** committed by the provider at submission: {{deliverable}}\n\n**The delivered content** registered by the provider: {{deliverableURI}}",
-  "question": "Does the submitted work satisfy the agreement?",
+  "description": "ERC-8183 escrow job {{jobId}}, on escrow {{escrowAddress}}, was challenged by the client.\n\n**The agreement**: {{description}}\n\n**The deliverable hash** registered by the provider: {{deliverable}}\n\n**The delivered content** registered by the provider: {{deliverableURI}}",
+  "question": "Does the registered deliverable hash match the hash committed on the escrow and does the submitted work satisfy the agreement?",
   "answers": [
     {
       "id": "0x1",
       "title": "Yes, accept",
-      "description": "The submission fulfills the agreement."
+      "description": "The hashes match and the submission fulfills the agreement."
     },
     {
       "id": "0x2",
       "title": "No, reject",
-      "description": "The submission does not fulfill the agreement."
+      "description": "The hashes do not match and/or the submission does not fulfill the agreement."
     }
   ],
   "aliases": {
