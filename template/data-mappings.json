@@ -1,9 +1,9 @@
 [
   {
     "type": "abi/call",
-    "abi": "function disputeData(address evaluator, uint256 disputeId) view returns ((uint256 jobId, address escrowAddress, string deliverableURI, bytes32 deliverable, address client, address provider, string description) data)",
-    "address": "0xA36902CF1922732bAE257e1bdb3A4b942262c0e2",
-    "args": ["{{arbitrableAddress}}", "{{disputeID}}"],
+    "abi": "function disputeData(uint256 disputeId) view returns ((uint256 jobId, address escrowAddress, string deliverableURI, bytes32 deliverable, address client, address provider, string description) data)",
+    "address": "{{arbitrableAddress}}",
+    "args": ["{{disputeID}}"],
     "seek": [
       "jobId",
       "escrowAddress",

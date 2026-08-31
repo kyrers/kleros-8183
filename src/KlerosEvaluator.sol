@@ -19,6 +19,20 @@ contract KlerosEvaluator is IArbitrableV2 {
     using SafeERC20 for IERC20;
 
     // ************************************* //
+    // *             Structs               * //
+    // ************************************* //
+
+    struct DisputeData {
+        uint256 jobId;
+        address escrowAddress;
+        string deliverableURI;
+        bytes32 deliverable;
+        address client;
+        address provider;
+        string description;
+    }
+
+    // ************************************* //
     // *             Storage               * //
     // ************************************* //
 
@@ -252,6 +266,22 @@ contract KlerosEvaluator is IArbitrableV2 {
     // ************************************* //
     // *           Public Views            * //
     // ************************************* //
+
+    /// @notice A given job dispute's information.
+    /// @param _disputeId The dispute in the arbitrator.
+    /// @return data The dispute data; empty for unknown disputes.
+    function disputeData(
+        uint256 _disputeId
+    ) external view returns (DisputeData memory data) {
+        data.jobId = disputeToJob[_disputeId];
+        data.escrowAddress = address(escrow);
+        data.deliverableURI = deliverableURIs[data.jobId];
+        data.deliverable = deliverableHashes[data.jobId];
+        ERC8183.Job memory job = escrow.getJob(data.jobId);
+        data.client = job.client;
+        data.provider = job.provider;
+        data.description = job.description;
+    }
 
     /// @notice Creation-time checks only; funding is checked in acceptJob.
     /// @param _jobId The job to check.
