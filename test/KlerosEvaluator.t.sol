@@ -376,7 +376,8 @@ contract KlerosEvaluatorTest is Test {
         assertEq(evaluator.deliverableHashes(jobId), keccak256("deliverable"));
     }
 
-    /// Overwriting is allowed; the escrow's hash commitment is the anchor.
+    /// Overwriting is allowed while unchallenged; the escrow's hash
+    /// commitment is the anchor.
     function test_RegisterDeliverable_OverwriteAllowed() public {
         uint256 jobId = createSubmittedJob();
         vm.startPrank(provider);
@@ -395,29 +396,31 @@ contract KlerosEvaluatorTest is Test {
         assertEq(evaluator.deliverableHashes(jobId), keccak256("deliverable"));
     }
 
-    /// A dispute doesn't move the job out of Submitted, so a provider who
-    /// forgot to register can still do it mid-dispute.
-    function test_RegisterDeliverable_WorksMidDispute() public {
+    /// The record freezes at the challenge: the provider cannot change what
+    /// jurors are judging mid-dispute.
+    function test_RegisterDeliverable_RevertsWhenChallenged() public {
         uint256 jobId = createSubmittedJob();
+        vm.prank(provider);
+        evaluator.registerDeliverable(jobId, "ipfs://wrong", keccak256("wrong"));
         challengeJob(jobId);
         vm.prank(provider);
+        vm.expectRevert(KlerosEvaluator.AlreadyChallenged.selector);
         evaluator.registerDeliverable(
             jobId,
-            "ipfs://deliverable",
+            "ipfs://update",
             keccak256("deliverable")
         );
-        assertEq(evaluator.deliverableURIs(jobId), "ipfs://deliverable");
+        assertEq(evaluator.deliverableURIs(jobId), "ipfs://wrong");
     }
 
-    /// The disclosure record closes with the job: no rewriting history
-    /// after the ruling.
+    /// The record stays frozen after the ruling: no rewriting history.
     function test_RegisterDeliverable_RevertsAfterRuling() public {
         uint256 jobId = createSubmittedJob();
         uint256 disputeId = challengeJob(jobId);
         arbitrator.giveRuling(disputeId, evaluator.RULING_REJECT());
 
         vm.prank(provider);
-        vm.expectRevert(KlerosEvaluator.JobNotSubmitted.selector);
+        vm.expectRevert(KlerosEvaluator.AlreadyChallenged.selector);
         evaluator.registerDeliverable(
             jobId,
             "ipfs://rewritten-history",

@@ -161,8 +161,9 @@ contract KlerosEvaluator is IArbitrableV2 {
     /// @notice The provider registers a reference to the content behind the
     /// deliverable hash committed on the escrow, restating that hash, so
     /// jurors can access and verify the content if a dispute arises.
-    /// Overwriting is harmless and lying is self-defeating: the escrow's
-    /// hash commitment is what the jurors will verify the content against.
+    /// Registering again overwrites, but only until the client challenges:
+    /// from the challenge on, the record is frozen, so every juror in the
+    /// dispute judges the same evidence.
     /// @param _jobId The job the content belongs to.
     /// @param _deliverableURI Reference to the delivered content.
     /// @param _deliverable The content hash, restating the escrow commitment.
@@ -172,6 +173,7 @@ contract KlerosEvaluator is IArbitrableV2 {
         bytes32 _deliverable
     ) external {
         require(accepted[_jobId], NotAccepted());
+        require(!challenged[_jobId], AlreadyChallenged());
         ERC8183.Job memory job = escrow.getJob(_jobId);
         require(msg.sender == job.provider, NotJobProvider());
         require(job.status == ERC8183.JobStatus.Submitted, JobNotSubmitted());
