@@ -401,7 +401,11 @@ contract KlerosEvaluatorTest is Test {
     function test_RegisterDeliverable_RevertsWhenChallenged() public {
         uint256 jobId = createSubmittedJob();
         vm.prank(provider);
-        evaluator.registerDeliverable(jobId, "ipfs://wrong", keccak256("wrong"));
+        evaluator.registerDeliverable(
+            jobId,
+            "ipfs://wrong",
+            keccak256("wrong")
+        );
         challengeJob(jobId);
         vm.prank(provider);
         vm.expectRevert(KlerosEvaluator.AlreadyChallenged.selector);
