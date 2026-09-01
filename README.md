@@ -18,7 +18,7 @@ Kleros integrates as the job's **evaluator**, via the `KlerosEvaluator` contract
 Jurors must have the relevant information in the case page. Three pieces make that possible:
 
 - **Dispute template and data mappings** ([template/](template/)) contains a `dispute-template` and a `data-mappings` that are registered on Kleros' template registry by the constructor.
-- **`KlerosEvaluatorView`** is a read-only aggregator returning everything the template needs in a single call as a named struct. One deployment serves every evaluator on the chain; its address goes into `data-mappings.json`. Struct returns are used deliberately here, so information can be decoded identically across the different kleros-sdk versions deployed. For a production version, this might not be needed, or a better alternative might be possible.
+- **`disputeData`** is a view on the evaluator returning everything the template needs in a single call as a named struct, and the data mappings call it on the dispute's own arbitrable. Struct returns are used deliberately, so information decodes identically across the different kleros-sdk versions deployed.
 - **The dispute policy** ([template/policy.md](template/policy.md), pinned on IPFS) instructs jurors: verify the registered content hashes to the committed deliverable; judge it against the agreement; non-disclosure is a reject, never a refuse-to-arbitrate. This is, of course, a mock policy used for the PoC, but it contains useful information.
 
 ### Decisions & PoC limitations
@@ -30,7 +30,8 @@ Jurors must have the relevant information in the case page. Three pieces make th
 - **Claims are ignored.** The escrow's claim system gets no policy in v1.
 - **Rulings are binary.** `complete()` or `reject()` is all the current spec allows a ruling to enforce.
 - **Evaluator fees exist.** Even if Kleros wants no evaluator fee, only the escrow's admin (a given marketplace) sets them. To integrate with marketplaces that force evaluator fees, the `KlerosEvaluator` contract owner can collect them via `collectEvaluatorFees`, otherwise fees would just be lost.
-- **Provider committing on the escrow is not enough.** The escrow only emits the commitment hash in an event, which neither contracts nor the case page can read reliably, so `registerDeliverable` exists for the provider to be able to point jurors to the actual work delivered, and also to restate the hash committed to in the escrow contract. The escrow's event stays the authoritative commitment: a lying restatement just diverges from the provider's own escrow commitment, which the client can prove in the evidence tab and the jurors will punish with a reject, according to the PoC policy.
+- **Provider committing on the escrow is not enough.** The escrow only emits the commitment hash in an event, which neither contracts nor the case page can read reliably, so `registerDeliverable` exists for the provider to be able to point jurors to the actual work delivered, and also to restate the hash committed to in the escrow contract. The escrow's event stays the authoritative commitment: a lying restatement just diverges from the provider's own escrow commitment, which the client can prove in the evidence tab and the jurors will punish with a reject, according to the PoC policy. Registrations can be overwritten only until the client challenges; from the moment a dispute is created the record is frozen, so every juror in a dispute judges the same evidence.
+- **Non-file deliverables use a delivery note.** When the work is not a file (an on-chain transfer, a deployed application, service access), the provider registers a note from which jurors can verify delivery using public material only, per the mock policy's "What the provider registers" section. The demo's fourth case runs this path.
 - **The template is immutable.** It is registered once at construction; changing it means redeploying the evaluator. A production integration might want governed template versioning.
 - **Interfaces match the current mainnet/testnet deployments.** They lag some existing changes on the dev branches, but it means this PoC works on the deployed protocol today.
 - **One evaluator instance per escrow.** Job ids are just counters, so one evaluator for multiple escrows would have conflicting job ids. If in the future, we have multiple evaluators integrating with multiple escrows, we should put the marketplace's identity in the template title, so the case title in the court can make it clear which marketplace a given dispute refers to.
@@ -43,13 +44,12 @@ All contracts are deployed and verified on Arbitrum Sepolia, interacting with th
 | --- | --- |
 | ERC8183 escrow (proxy, their code untouched) | `0x3745128DcE892cD86B926E7F3f1cE50C5Fa2F736` |
 | ERC8183 implementation | `0xA4009B2a06f24b5639Cf070Da9F8A9436A69Afcd` |
-| KlerosEvaluator | `0xf26b4FA85507914Ae0d3C58ac0D3A30c9C493103` |
-| KlerosEvaluatorView | `0xA36902CF1922732bAE257e1bdb3A4b942262c0e2` |
+| KlerosEvaluator | `0xDfa9E40FcBf4f37aa09996eAF39962742299B7Bc` |
 | Payment token (Circle testnet USDC) | `0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d` |
 | Kleros KlerosCore | `0xE8442307d36e9bf6aB27F1A009F95CE8E11C3479` |
 | Kleros DisputeTemplateRegistry | `0xe763d31Cb096B4bc7294012B78FC7F148324ebcb` |
 
-Earlier evaluator iterations exist on-chain (`0xD7E9…9600`, `0xd2AC…59BA`, `0x6026…fe37`, `0x8059…6554`). These were part of the tests and abandoned after a problem was found that required a new evaluator deployment.
+Earlier evaluator iterations exist on-chain (`0xD7E9…9600`, `0xd2AC…59BA`, `0x6026…fe37`, `0x8059…6554`, `0xf26b…3103`, `0xff18…865D`). These were part of the tests and abandoned after a problem was found that required a new evaluator deployment.
 
 ## Demo
 
@@ -57,13 +57,14 @@ Every settlement path ran on the real testnet court, against real contracts, wit
 
 - **Refusal with refund**: the evaluator refuses a job whose expiry is inside the margin and rejects it on the escrow with reason `"expiry inside margin"`, refunding the client in the same transaction.
 - **Optimistic completion**: work submitted and disclosed, nobody challenges, permissionless `finalize` completes with reason `"no challenge within window"`; the provider is paid and the 2% evaluator fee accrues to the evaluator.
-- **Disputed jobs** — three disputes under the same agreement:
+- **Disputed jobs** — four disputes: three under the same agreement, differing only in the delivered file, and a fourth whose deliverable is an on-chain transfer, disclosed via a delivery note:
 
 | Case | Delivery | Honest verdict |
 | --- | --- | --- |
-| [83](https://v2-testnet.kleros.builders/#/cases/83/overview) | A page satisfying the agreement | Yes, accept |
-| [84](https://v2-testnet.kleros.builders/#/cases/84/overview) | An "Under construction." page | No, reject |
-| [85](https://v2-testnet.kleros.builders/#/cases/85/overview) | Nothing registered | No, reject (policy rule 1) |
+| [95](https://v2-testnet.kleros.builders/#/cases/95/overview) | A page satisfying the agreement | Yes, accept |
+| [96](https://v2-testnet.kleros.builders/#/cases/96/overview) | An "Under construction." page | No, reject |
+| [97](https://v2-testnet.kleros.builders/#/cases/97/overview) | Nothing registered | No, reject (policy rule 1) |
+| [98](https://v2-testnet.kleros.builders/#/cases/98/overview) | An on-chain transfer, disclosed via a pinned [delivery note](demo/delivery-note.md) | Yes, accept |
 
 Note that every ruled settlement carries its dispute id as the escrow's reason, so each job's final state permanently cites the dispute that decided it.
 
@@ -93,8 +94,6 @@ forge test
 
 ## Reproducing the demo
 
-If the system is not deployed on the wanted chain, deploy the once-per-chain pieces first: `script/DeployEvaluatorView.s.sol`, then put the contract address in `template/data-mappings.json`. Then:
-
 ```bash
 forge script script/Deploy.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC --private-key $DEPLOYER_PK --broadcast
 ```
@@ -107,4 +106,4 @@ The demo scenarios live in [script/test_scenarios/](script/test_scenarios/) and 
 CLIENT_PK=0x... PROVIDER_PK=0x... forge script script/test_scenarios/RefuseAndRefund.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast
 ```
 
-same for `OptimisticCompletion.s.sol` (call `finalize(jobId)` on the evaluator after the `challengeWindow`) and `DisputedJobs.s.sol` (pays 3 × 0.00081 ETH of arbitration fees).
+same for `OptimisticCompletion.s.sol` (call `finalize(jobId)` on the evaluator after the `challengeWindow`) and `DisputedJobs.s.sol` (pays 4 × 0.00081 ETH of arbitration fees).
