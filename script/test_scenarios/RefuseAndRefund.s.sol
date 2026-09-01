@@ -16,7 +16,7 @@ import {KlerosEvaluator} from "../../src/KlerosEvaluator.sol";
 ///     --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast
 contract RefuseAndRefund is Script {
     ERC8183 constant ESCROW = ERC8183(0x3745128DcE892cD86B926E7F3f1cE50C5Fa2F736);
-    KlerosEvaluator constant EVALUATOR = KlerosEvaluator(0xf26b4FA85507914Ae0d3C58ac0D3A30c9C493103);
+    KlerosEvaluator constant EVALUATOR = KlerosEvaluator(0xDfa9E40FcBf4f37aa09996eAF39962742299B7Bc);
     IERC20 constant USDC = IERC20(0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d);
     uint256 constant BUDGET = 10e6;
 

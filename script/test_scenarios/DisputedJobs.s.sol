@@ -8,11 +8,13 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {KlerosEvaluator} from "../../src/KlerosEvaluator.sol";
 
 /// @title DisputedJobs
-/// @dev Demo scenario: three jobs under the same agreement are submitted and
-/// challenged, creating three real disputes in the Agentic Commerce Court:
+/// @dev Demo scenario: four jobs are submitted and challenged, creating four
+/// real disputes in the Agentic Commerce Court. Three share the same
+/// agreement and differ only in the delivered file:
 ///   1. the delivered page satisfies the agreement (honest verdict: accept);
 ///   2. the delivered page does not (honest verdict: reject);
 ///   3. the provider registers nothing (policy rule 1: reject, never RtA).
+/// The fourth job's deliverable is an on-chain transfer, to both test the provider delivery registration and the policy updates.
 ///
 /// NOTE After this script, the disputes are in the court's hands: sortition,
 /// juror votes, and period passing happen on the arbitrator.
@@ -23,7 +25,7 @@ import {KlerosEvaluator} from "../../src/KlerosEvaluator.sol";
 ///     --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast
 contract DisputedJobs is Script {
     ERC8183 constant ESCROW = ERC8183(0x3745128DcE892cD86B926E7F3f1cE50C5Fa2F736);
-    KlerosEvaluator constant EVALUATOR = KlerosEvaluator(0xf26b4FA85507914Ae0d3C58ac0D3A30c9C493103);
+    KlerosEvaluator constant EVALUATOR = KlerosEvaluator(0xDfa9E40FcBf4f37aa09996eAF39962742299B7Bc);
     IERC20 constant USDC = IERC20(0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d);
     uint256 constant BUDGET = 10e6;
 
@@ -41,6 +43,15 @@ contract DisputedJobs is Script {
     /// A commitment whose content is never registered.
     bytes32 constant UNDISCLOSED_DELIVERABLE = keccak256("undisclosed demo deliverable");
 
+    /// The OTC agreement names a fixed on-chain fact, not the job's parties,
+    /// so re-runs with any wallets create jobs that the same historical transfer satisfies.
+    string constant OTC_AGREEMENT =
+        "An on-chain transfer of 0.0001 ETH to 0xB9F77BdAa034600069D0B01C094d11FB2A6c341e on Arbitrum Sepolia";
+
+    /// The delivery note citing that transfer, and its content hash, pinned at the URI below.
+    bytes32 constant OTC_DELIVERABLE = 0x106de7ec2aa1f01c3afd12a8f044670fdbcc09145a396c656ad7cd5e45aced18;
+    string constant OTC_URI = "ipfs://bafkreih4z6hdrsrsc2hxai5kivyk4p3cam6hugqyysn6ommmwxbrmo7uey";
+
     function run() external {
         uint256 clientPk = vm.envUint("CLIENT_PK");
         uint256 providerPk = vm.envUint("PROVIDER_PK");
@@ -49,10 +60,10 @@ contract DisputedJobs is Script {
             EVALUATOR.arbitratorExtraData()
         );
 
-        uint256[3] memory jobIds;
+        uint256[4] memory jobIds;
 
         vm.startBroadcast(clientPk);
-        USDC.approve(address(ESCROW), 3 * BUDGET);
+        USDC.approve(address(ESCROW), 4 * BUDGET);
         for (uint256 i = 0; i < 3; i++) {
             jobIds[i] = ESCROW.createJob(
                 provider,
@@ -63,16 +74,24 @@ contract DisputedJobs is Script {
                 0
             );
         }
+        jobIds[3] = ESCROW.createJob(
+            provider,
+            address(EVALUATOR),
+            uint48(block.timestamp + 7 days),
+            OTC_AGREEMENT,
+            address(0),
+            0
+        );
         vm.stopBroadcast();
 
         vm.startBroadcast(providerPk);
-        for (uint256 i = 0; i < 3; i++) {
+        for (uint256 i = 0; i < 4; i++) {
             ESCROW.setBudget(jobIds[i], address(USDC), BUDGET, "");
         }
         vm.stopBroadcast();
 
         vm.startBroadcast(clientPk);
-        for (uint256 i = 0; i < 3; i++) {
+        for (uint256 i = 0; i < 4; i++) {
             ESCROW.fund(jobIds[i], address(USDC), BUDGET, "");
             EVALUATOR.acceptJob(jobIds[i]);
         }
@@ -84,20 +103,23 @@ contract DisputedJobs is Script {
         ESCROW.submit(jobIds[1], FAIL_DELIVERABLE, "");
         EVALUATOR.registerDeliverable(jobIds[1], FAIL_URI, FAIL_DELIVERABLE);
         ESCROW.submit(jobIds[2], UNDISCLOSED_DELIVERABLE, "");
+        ESCROW.submit(jobIds[3], OTC_DELIVERABLE, "");
+        EVALUATOR.registerDeliverable(jobIds[3], OTC_URI, OTC_DELIVERABLE);
         vm.stopBroadcast();
 
         vm.startBroadcast(clientPk);
-        for (uint256 i = 0; i < 3; i++) {
+        for (uint256 i = 0; i < 4; i++) {
             EVALUATOR.challenge{value: cost}(jobIds[i]);
         }
         vm.stopBroadcast();
 
-        for (uint256 i = 0; i < 3; i++) {
+        for (uint256 i = 0; i < 4; i++) {
             require(EVALUATOR.challenged(jobIds[i]), "job not challenged");
         }
         console2.log("satisfying delivery, jobId:", jobIds[0]);
         console2.log("failing delivery, jobId:", jobIds[1]);
         console2.log("undisclosed delivery, jobId:", jobIds[2]);
+        console2.log("OTC delivery note, jobId:", jobIds[3]);
         console2.log("arbitration cost paid per dispute (wei):", cost);
     }
 }
